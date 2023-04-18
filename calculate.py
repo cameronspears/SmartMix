@@ -1,25 +1,25 @@
-from scipy.io import wavfile
 from pydub import AudioSegment
-from pyloudnorm import Meter
+import pyloudnorm as pyln
+import numpy as np
 
 def calculate_lufs(audio_segment):
-    meter = Meter(audio_segment.frame_rate)
-    return meter.integrated_loudness(audio_segment.get_array_of_samples().astype(float))
+    audio_data = np.array(audio_segment.get_array_of_samples(), dtype=np.float32)
+    sample_rate = audio_segment.frame_rate
 
-def analyze_wav_files(filepaths):
-    wav_data = []
-    sample_rates = []
-    individual_loudness = []
+    # Normalize the audio data to be in the range of -1 to 1
+    audio_data /= np.iinfo(np.int32).max
 
-    for filepath in filepaths:
-        sample_rate, data = wavfile.read(filepath)
-        sample_rates.append(sample_rate)
-        wav_data.append(data)
+    if audio_segment.channels > 1:
+        audio_data = audio_data.reshape(-1, audio_segment.channels)
 
-        audio = AudioSegment(data.tobytes(), frame_rate=sample_rate, sample_width=data.dtype.itemsize, channels=len(data.shape))
-        individual_loudness.append(calculate_lufs(audio))
+    meter = pyln.Meter(sample_rate)
+    loudness = meter.integrated_loudness(audio_data)
+    return loudness
 
-    return wav_data, sample_rates, individual_loudness
+def analyze_wav_files(file_paths):
+    audio_segments = [AudioSegment.from_wav(file_path) for file_path in file_paths]
+    individual_loudness = [calculate_lufs(audio_segment) for audio_segment in audio_segments]
+    return audio_segments, individual_loudness
 
 def calculate_gain_adjustment(individual_loudness, target_loudness):
     gain_adjustments = [target_loudness - loudness for loudness in individual_loudness]
